@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: concho-wholesale-checker
+    runtime: python
+    plan: starter            # needed for the persistent disk below
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --preload --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: DATA_DIR
+        value: /var/data
+      - key: APP_PASSWORD
+        sync: false          # set this in the Render dashboard
+      - key: CLC_EMAIL
+        sync: false          # your CLC contact's email, fills the "To" line
+      - key: SENDER_NAME
+        value: Jake
+    disk:
+      name: wholesale-data
+      mountPath: /var/data
+      sizeGB: 1

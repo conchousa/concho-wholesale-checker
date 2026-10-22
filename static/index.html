@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Concho Wholesale Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">C</span>
+    <div>
+      <h1>Wholesale Checker</h1>
+      <p class="brand-sub">Retailer code, licensing, next step</p>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-view="check" class="tab is-active">Check a lead</button>
+    <button role="tab" data-view="log" class="tab">Lead log <span class="tab-count" id="pendingCount" hidden></span></button>
+    <button role="tab" data-view="demand" class="tab">License demand</button>
+    <button role="tab" data-view="data" class="tab">Data</button>
+  </nav>
+</header>
+
+<main>
+<!-- ===================== CHECK ===================== -->
+<section id="view-check" class="view is-active">
+  <div class="check-grid">
+    <div class="flow">
+
+      <!-- Step 1 -->
+      <section class="step" id="step1">
+        <header class="step-head">
+          <span class="step-num">1</span>
+          <div>
+            <h2>Find their CLC retailer code</h2>
+            <p class="hint">Search by store name or code. Same-name stores in other towns show up too, so confirm with the buyer if it's close.</p>
+          </div>
+        </header>
+        <div class="search-row">
+          <input id="retailerQuery" type="search" placeholder="Store name or retailer code" autocomplete="off" aria-label="Search retailer list">
+        </div>
+        <div id="retailerResults" class="results" aria-live="polite"></div>
+
+        <div id="selectedRetailer" class="selected" hidden></div>
+
+        <div id="noCodePanel" class="nocode" hidden>
+          <p><strong>No code on file.</strong> CLC needs the store name, location, and the buyer's name and email. The request email is ready in step 3 once you fill in the lead details.</p>
+          <label class="field inline">
+            <span>Store type to preview licensing</span>
+            <select id="previewChannel"></select>
+          </label>
+        </div>
+
+        <div class="step-actions">
+          <button class="btn-ghost" id="markNoCode">Not in the list</button>
+        </div>
+      </section>
+
+      <!-- Step 2 -->
+      <section class="step" id="step2">
+        <header class="step-head">
+          <span class="step-num">2</span>
+          <div>
+            <h2>Pick the schools they want</h2>
+            <p class="hint" id="schoolHint">Pick a retailer first to see what we can sell into their store type.</p>
+          </div>
+        </header>
+        <input id="schoolFilter" type="search" placeholder="Filter schools" aria-label="Filter schools">
+        <div id="schoolChips" class="chips"></div>
+        <p class="legend-line">
+          <span class="dot ok"></span>Licensed for this store type
+          <span class="dot no"></span>Not licensed
+        </p>
+      </section>
+
+      <!-- Step 3 -->
+      <section class="step" id="step3">
+        <header class="step-head">
+          <span class="step-num">3</span>
+          <div>
+            <h2>What happens next</h2>
+            <p class="hint">Updates as you go.</p>
+          </div>
+        </header>
+        <div id="verdict"></div>
+        <div id="resultTable"></div>
+        <div id="drafts"></div>
+      </section>
+    </div>
+
+    <!-- Lead card -->
+    <aside class="lead">
+      <h2>Lead</h2>
+      <p class="hint" id="leadState">New lead</p>
+      <label class="field"><span>Store name</span><input id="f_store_name" required></label>
+      <label class="field"><span>Buyer name</span><input id="f_contact_name"></label>
+      <label class="field"><span>Buyer email</span><input id="f_email" type="email"></label>
+      <label class="field"><span>Phone</span><input id="f_phone" type="tel"></label>
+      <label class="field"><span>Location (city, state)</span><input id="f_location"></label>
+      <label class="field"><span>Notes</span><textarea id="f_notes" rows="3"></textarea></label>
+      <div class="lead-actions">
+        <button class="btn" id="saveLead">Save lead</button>
+        <button class="btn-ghost" id="newLead">Start new</button>
+      </div>
+      <p id="saveMsg" class="save-msg" role="status"></p>
+    </aside>
+  </div>
+</section>
+
+<!-- ===================== LOG ===================== -->
+<section id="view-log" class="view">
+  <div class="page-head">
+    <h2>Lead log</h2>
+    <div class="filters" id="logFilters">
+      <button data-status="" class="filter is-active">All</button>
+      <button data-status="needs_code" class="filter">Waiting on CLC code</button>
+      <button data-status="ready" class="filter">Ready to invoice</button>
+      <button data-status="partial" class="filter">Partly covered</button>
+      <button data-status="not_licensed" class="filter">Not licensed</button>
+      <button data-status="review" class="filter">Needs review</button>
+      <button data-status="invoiced" class="filter">Invoiced</button>
+    </div>
+  </div>
+  <div id="logTable"></div>
+</section>
+
+<!-- ===================== DEMAND ===================== -->
+<section id="view-demand" class="view">
+  <div class="page-head">
+    <h2>License demand</h2>
+    <p class="hint">Every saved lead that asked for a school we can't sell into their store type lands here. When the same school keeps showing up, that's the case for applying.</p>
+  </div>
+  <div id="demandTable"></div>
+</section>
+
+<!-- ===================== DATA ===================== -->
+<section id="view-data" class="view">
+  <div class="page-head">
+    <h2>Data</h2>
+    <p class="hint">Upload the new CLC retailer list each month and the Active Channels sheet whenever a license changes. The checker switches over right away.</p>
+  </div>
+  <div class="data-grid">
+    <form class="upload" data-kind="retailers">
+      <h3>CLC retailer code list</h3>
+      <p class="meta" id="meta-retailers"></p>
+      <p class="hint">Needs columns: Retailer Code, Retailer Name, Retailer Type.</p>
+      <input type="file" accept=".xlsx" required>
+      <button class="btn" type="submit">Upload retailer list</button>
+      <p class="save-msg" role="status"></p>
+    </form>
+    <form class="upload" data-kind="channels">
+      <h3>Active Channels licensing sheet</h3>
+      <p class="meta" id="meta-channels"></p>
+      <p class="hint">Same layout as today: school in column A, then RRET, SMT, SGSS, BDPT, CAMP, GLFS.</p>
+      <input type="file" accept=".xlsx" required>
+      <button class="btn" type="submit">Upload licensing sheet</button>
+      <p class="save-msg" role="status"></p>
+    </form>
+  </div>
+  <h3 class="sub">Store type codes</h3>
+  <div id="channelLegend" class="legend-table"></div>
+</section>
+</main>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

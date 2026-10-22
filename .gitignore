@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+data/.cache_*.pkl
+data/.upload_*
+data/leads.db
+.venv/
