@@ -27,6 +27,7 @@ function blankLead() {
 async function api(path, opts = {}) {
   const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401) { location.href = "/login"; throw new Error("Signed out"); }
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 }

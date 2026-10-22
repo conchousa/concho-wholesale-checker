@@ -13,7 +13,12 @@ from datetime import datetime, timezone
 from functools import wraps
 
 import pandas as pd
-from flask import Flask, Response, jsonify, request, send_from_directory
+import hmac
+import secrets
+from datetime import timedelta
+
+from flask import Flask, Response, jsonify, redirect, request, send_from_directory, session, url_for
+from markupsafe import escape
 from rapidfuzz import fuzz, process
 
 from channels import CHANNEL_LABELS, TRACKED_CHANNELS
@@ -32,24 +37,88 @@ SENDER_NAME = os.environ.get("SENDER_NAME", "Jake")
 FILES = {"retailers": "retailers.xlsx", "channels": "channels.xlsx"}
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("RENDER") is not None or os.environ.get("SECURE_COOKIES") == "1",
+)
 _lock = threading.Lock()
 STATE = {}
 
 
 # ---------------------------------------------------------------- auth
+def signed_in():
+    return not APP_PASSWORD or session.get("auth") is True
+
+
 def requires_auth(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not APP_PASSWORD:
+        if signed_in():
             return fn(*args, **kwargs)
-        auth = request.authorization
-        if auth and auth.password == APP_PASSWORD:
-            return fn(*args, **kwargs)
-        return Response(
-            "Password required", 401, {"WWW-Authenticate": 'Basic realm="Concho Wholesale"'}
-        )
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Not signed in"}), 401
+        return redirect(url_for("login", next=request.path))
 
     return wrapper
+
+
+LOGIN_HTML = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in | Concho Wholesale Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--paper)}
+.login-card{width:100%;max-width:360px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);padding:28px}
+.login-card .brand{margin-bottom:20px}
+.login-card label{display:block;font:600 14px var(--sans);color:var(--ink);margin-bottom:6px}
+.login-card input{width:100%;box-sizing:border-box;padding:10px 12px;font:16px var(--sans);border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);color:var(--ink)}
+.login-card input:focus{outline:2px solid var(--saddle);outline-offset:1px}
+.login-card button{margin-top:16px;width:100%;padding:11px;font:600 15px var(--sans);color:#fff;background:var(--saddle);border:0;border-radius:var(--radius-sm);cursor:pointer}
+.login-err{margin:0 0 14px;padding:9px 12px;border-radius:var(--radius-sm);background:var(--brick-tint);color:var(--brick);font:14px var(--sans)}
+</style></head>
+<body><div class="login-wrap"><form class="login-card" method="post" action="/login">
+<div class="brand"><span class="brand-mark" aria-hidden="true">C</span><div><h1>Wholesale Checker</h1><p class="brand-sub">Concho team sign in</p></div></div>
+__ERR__
+<input type="hidden" name="next" value="__NEXT__">
+<label for="pw">Password</label>
+<input id="pw" name="password" type="password" autocomplete="current-password" autofocus required>
+<button type="submit">Sign in</button>
+</form></div></body></html>"""
+
+
+def safe_next(v):
+    return v if v and v.startswith("/") and not v.startswith("//") else "/"
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    err = ""
+    nxt = safe_next(request.values.get("next", "/"))
+    if request.method == "POST":
+        pw = request.form.get("password", "")
+        if APP_PASSWORD and hmac.compare_digest(pw.encode(), APP_PASSWORD.encode()):
+            session.clear()
+            session["auth"] = True
+            session.permanent = True
+            return redirect(nxt)
+        err = '<p class="login-err" role="alert">That password didn\'t work. Try again.</p>'
+    elif signed_in():
+        return redirect(nxt)
+    html = LOGIN_HTML.replace("__ERR__", err).replace("__NEXT__", escape(nxt))
+    return Response(html, 401 if err else 200, mimetype="text/html")
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 # ---------------------------------------------------------------- data loading
